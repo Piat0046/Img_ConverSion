@@ -15,7 +15,11 @@ def main(name):
         global path
         global mask_save_path
         global jpg_save_path
-
+        global image_id
+        global ann_id
+        global images
+        global annotations
+        
         # load files & folder
         img_path = os.path.join(path, 'img')
         json_path = os.path.join(path, 'label')
@@ -29,7 +33,6 @@ def main(name):
         img_w, img_h = img.shape[0], img.shape[1]
         annotations = json_dic['annotations']
         mask_zero = np.zeros((img_w, img_h,3), dtype = np.uint8)
-        #"license": 1,"file_name": "COCO_test2014_000000027454.jpg","coco_url": "http://images.cocodataset.org/test2014/COCO_test2014_000000027454.jpg","height": 640,"width": 427,"date_captured": "2013-11-22 01:57:00","id": 27454}
         for num in range(len(annotations)):
             class_num = annotations[num]['class']
             color = check_color(class_num)
@@ -62,6 +65,23 @@ def main(name):
         img_png.save(path_join(mask_save_path, f'{name}.png'))
         cv2.imwrite(path_join(jpg_save_path, f'{name}.jpg'), img)
 
+
+        annotations = {
+                'id': ann_id,
+                'image_id': image_id,
+                'category_id': classes[idx],
+                'segmentation': rle,
+                'area': float(mask.sum()),
+                'bbox': [int(x) for x in mask2bbox(mask)],
+                'iscrowd': 0
+            }
+        images = {
+            'id': image_id,
+            'width': img.shape[1],
+            'height': img.shape[0],
+            'file_name': img_name
+        }
+
         return img_meta
             
     except Exception as e:
@@ -92,14 +112,30 @@ if __name__=='__main__':
                  "categories" : [{"supercategory": "fire","id": 1,"name": "black_smoke"},{"supercategory": "fire","id": 2,"name": "gray_smoke"},{"supercategory": "fire","id": 3,"name": "white_smoke"},{"supercategory": "fire","id": 4,"name": "fire"}]
                  }
 
+    image_id = 1
+    ann_id   = 1
+    images = []
+    annotations = []
 
     cpu = 16
     with Pool(cpu) as pool:
         for num, i in enumerate(tqdm(pool.imap_unordered(main, img_list[:1]))):
-            i['id'] = num
-            make_json['images'].append(i)
-    
+            
     json_path = path_join(path_join(save_path, mode), mode+'.json')
 
-    with open(json_path, "w") as json_file:
-        json.dump(make_json, json_file)
+    info = {
+        'year': 2012,
+        'version': 1,
+        'description': 'Pascal SBD',
+    }
+
+    categories = [{'id': x+1} for x in range(4)]
+
+    with open(json_path, 'w') as f:
+        json.dump({
+            'info': info,
+            'images': images,
+            'annotations': annotations,
+            'licenses': {},
+            'categories': categories
+        }, f)

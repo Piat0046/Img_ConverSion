@@ -1,7 +1,9 @@
 import os
+import sys
 import cv2
 import json
 import numpy as np
+import argparse
 from PIL import Image
 from tqdm import tqdm
 from pprint import pprint
@@ -9,14 +11,9 @@ from multiprocessing import Pool
 from os.path import join as path_join
 from utils import *
 
-
 def main(name):
     try:
         global path
-        global mask_save_path
-        global jpg_save_path
-        global images
-        global annotations
         
         # load files & folder
         img_path = os.path.join(path, 'img')
@@ -54,53 +51,60 @@ def main(name):
                     'iscrowd': 0
                 })
             #print(type(annotations[0]['segmentation']['counts']))
-        images = {
+        image = {
             'width': img.shape[1],
             'height': img.shape[0],
-            'file_name': name
+            'file_name': name+'.jpg'
         }
-        return annotations, images
+        return annotations, image
             
     except Exception as e:
         print(e)
+        print(name)
+        return None
 
 
 
 if __name__=='__main__':
+    
+    parser = argparse.ArgumentParser(
+    description='Make Aihub dataset to coco dataset')
 
-    path = '/home/ubuntu/fire/aihub/Validation'
+    parser.add_argument('--path', type=str, required=True,
+                        help='Custom dataset path')
+    parser.add_argument('--mode', type=str, required=True, choices=['train', 'val', 'test'],
+                        help='Select your dataset')
+
+    args = parser.parse_args()
+
+    path = args.path
     jpg_path = os.path.join(path, 'img')
     img_list = [i.rsplit('.')[0] for i in os.listdir(jpg_path)]
 
     # Make Folder
-    mode = 'valid'
-    save_path = '/home/ubuntu/fire/aihub/datase'
-    folder_list = [mode, mode+'/Annotations', mode+'/JPEGImages']
-    folder_path_list = [os.path.join(save_path, folder) for folder in folder_list]
-    jpg_save_path = folder_path_list[2]
-    mask_save_path = folder_path_list[1]
-    for folder_path in folder_path_list: createFolder(folder_path)
+    mode = args.mode
 
     image_id = 1
     ann_id   = 1
-    images = []
+    videos = []
     annotations = []
-
+    print(len(img_list))
     cpu = 16
     with Pool(cpu) as pool:
-        for num, i in enumerate(tqdm(pool.imap_unordered(main, img_list))):
-            annotation, image = i
-            for ann in annotation:
-                ann['id'] = ann_id
-                ann['image_id'] =  image_id
-                annotations.append(ann)
-                ann_id += 1
-            image['id'] = image_id
-            images.append(image)
-            image_id += 1
+        for num, i in enumerate(tqdm(pool.imap_unordered(main, img_list),total=len(img_list))):
+            if not i == None:
+                annotation, image = i
+                for ann in annotation:
+                    ann['id'] = ann_id
+                    ann['video_id'] =  image_id
+                    annotations.append(ann)
+                    ann_id += 1
+                image['id'] = image_id
+                videos.append(image)
+                image_id += 1
             
 
-    json_path = path_join(path_join(save_path, mode), mode+'.json')
+    json_path = path_join(path, mode+'.json')
 
     info = {
         'year': 2012,
@@ -108,12 +112,12 @@ if __name__=='__main__':
         'description': 'Pascal SBD',
     }
 
-    categories = [{'id': x+1} for x in range(4)]
+    categories = [{"id": 1, "name":"black smoke"}, {"id": 2,"name":"gray smoke"}, {"id": 3,"name":"white smoke"}, {"id": 4,"name":"fire"}]
 
     with open(json_path, 'w') as f:
         json.dump({
             'info': info,
-            'images': images,
+            'videos': videos,
             'annotations': annotations,
             'licenses': {},
             'categories': categories
